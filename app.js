@@ -17,9 +17,9 @@ dotenv.config();
 
 
 var transporter = nodemailer.createTransport({
-  service: 'gamil',
+  service: 'gmail',
   auth: {
-    user: SENDER,
+    user: process.env.SENDER,
     pass: process.env.GMAIL_PASSWORD
   }
 });
