@@ -5,7 +5,7 @@ const mysql = require('mysql');
 const util = require('util');
 const bodyParser = require('body-parser');  
 const cookieParser = require("cookie-parser");
-// const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer');
 
 const app = express();
 let PORT = process.env.PORT || 3000;
@@ -16,13 +16,13 @@ app.use(bodyParser.json());
 dotenv.config();
 
 
-// var transporter = nodemailer.createTransport({
-//   service: 'outlook',
-//   auth: {
-//     user: 'wassim.sellami@supcom.tn',
-//     pass: process.env.OUTLOOK_PASSWORD
-//   }
-// });
+var transporter = nodemailer.createTransport({
+  service: 'gamil',
+  auth: {
+    user: SENDER,
+    pass: process.env.GMAIL_PASSWORD
+  }
+});
 
 
 var con = mysql.createConnection({
@@ -46,8 +46,7 @@ app.listen(PORT, () =>{
 
 //checks if the token is valid.
 const authorization = (req, res, next) => {
-    //let jwtSecretKey = process.env.JWT_SECRET_KEY;
-    let jwtSecretKey = "test";
+    let jwtSecretKey = process.env.JWT_SECRET_KEY;
     const token = req.cookies.token;
     if (!token) {
       return res.sendStatus(403);
@@ -81,8 +80,7 @@ app.post('/user/login', async (req, res, next) => {
     let token;
     let user = queryResult[0];
     try {
-        // let jwtSecretKey = process.env.JWT_SECRET_KEY;
-        let jwtSecretKey = "test";
+        let jwtSecretKey = process.env.JWT_SECRET_KEY;
         userData = {
             "username": user.username,
             "is_present": user.is_present,
@@ -134,19 +132,19 @@ app.get("/user/logout", authorization,  (req, res) => {
   });
 
 
-// function sendEmail(subject, username){
-//   let mailOptions = {
-//     from: process.env.SENDER,
-//     to: process.env.RECEIVER,
-//     subject: subject,
-//     text: "User : "+username+"\n\n\nSent from a NodeJS server."
-//   };
+function sendEmail(subject, username){
+  let mailOptions = {
+    from: process.env.SENDER,
+    to: process.env.RECEIVER,
+    subject: subject,
+    text: "User : "+username+"\n\n\nSent from a NodeJS server."
+  };
   
-//   transporter.sendMail(mailOptions, function(error, info){
-//     if (error) {
-//       console.log(error);
-//     } else {
-//       console.log('Email sent: ' + info.response);
-//     }
-//   });
-// }
+  transporter.sendMail(mailOptions, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  });
+}
