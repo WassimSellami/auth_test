@@ -1,98 +1,152 @@
-const express = require('express')
-var mysql = require('mysql');
-const app = express()
-var bodyParser = require('body-parser');  
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json())
+const express = require('express');
+const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
+const mysql = require('mysql');
+const util = require('util');
+const bodyParser = require('body-parser');  
+const cookieParser = require("cookie-parser");
+// const nodemailer = require('nodemailer');
 
-const port = process.env.PORT || 3000;
+const app = express();
+let PORT = process.env.PORT || 3000;
+
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+dotenv.config();
+
+
+// var transporter = nodemailer.createTransport({
+//   service: 'outlook',
+//   auth: {
+//     user: 'wassim.sellami@supcom.tn',
+//     pass: process.env.OUTLOOK_PASSWORD
+//   }
+// });
 
 
 var con = mysql.createConnection({
-  host: "sql8.freemysqlhosting.net",
-  user: "sql8592135",
-  password: "yqLrSE3zLc",
-  database: "sql8592135"
-});
+    host: "sql8.freemysqlhosting.net",
+    user: "sql8592135",
+    password: "yqLrSE3zLc",
+    database: "sql8592135"
+  });
+const query = util.promisify(con.query).bind(con);
 
+  
+  con.connect(function(err) {
+      if (err) throw err;
+      console.log("Connected!");
+  });
+  
 
+app.listen(PORT, () =>{
+    console.log(`Server is up and running on ${PORT}`)
+});  
 
-con.connect(function(err) {
-    if (err) throw err;
-    console.log("Connected!");
-});
+//checks if the token is valid.
+const authorization = (req, res, next) => {
+    //let jwtSecretKey = process.env.JWT_SECRET_KEY;
+    let jwtSecretKey = "test";
+    const token = req.cookies.token;
+    if (!token) {
+      return res.sendStatus(403);
+    }
+    try {
+      const data = jwt.verify(token, jwtSecretKey);
+      req.username = data.username;
+      req.is_present = data.is_present;
+      req.time = data.time;
+      return next();
+    } catch {
+      return res.sendStatus(403);
+    }
+  };
 
+// Login in post method generating JWT and returning it with additionnal user data
+app.post('/user/login', async (req, res, next) => {
+    var sql = "SELECT * FROM user where code = ?";
+    var code = req.body.code;
+    try {
+        queryResult = await query(sql, [code]);
+    } catch {
+        const error = new Error("Error! Something went wrong.");
+        return next(error);
+    }
+    // if (!existingUser || existingUser.password != password) {
+    if (!queryResult) {
+        const error = Error("Wrong details please check at once");
+        return next(error);
+    }
+    let token;
+    let user = queryResult[0];
+    try {
+        // let jwtSecretKey = process.env.JWT_SECRET_KEY;
+        let jwtSecretKey = "test";
+        userData = {
+            "username": user.username,
+            "is_present": user.is_present,
+            time: Date()
+        };
+        // Creating jwt token
+        token = jwt.sign(userData, jwtSecretKey);
 
-// Reach RAS home page
-app.get('/', (req, res) => {
-    res.send("Welcome to RAS Home Page !");
-});
-
-
-// Get list of presence(list of username)
-app.get('/get_presence_list', (req, res) => {
-
-    let sql = "SELECT username FROM user where is_present = ?"
-    con.query(sql,[1], (err, result) =>{
-        if (err) throw err;
-        res.send(result);
+    } catch (err) {
+        console.log(err);
+        const error = new Error("Error! Something went wrong.");
+        return next(error);
+    }
+    sendEmail("User Login", user.username);
+    return res.
+    cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    })
+    .status(200)
+    .send({
+        "message" : "Logged in successfully !"
     });
 })
 
-
-// Get user by code
-app.post('/get_user', (req, res, next) => {
-    let sql = "SELECT * FROM user where code = ?";
-    let code = req.body.code;
-    con.query(sql, [code], function (err, result) {
-        if (err) throw err;
-        if(result.length>0){
-            console.log(result);
-            let user = result[0];
+// Getting protected info by token
+app.get('/user/get_protected_info', authorization,(req, res) =>{        
             let data = {
-                "username": user.username, 
-                "is_present": user.is_present
-            }
-            result = {
+                "username":req.username,
+                "is_present": req.is_present,
+                "time":req.time
+            };
+            let response ={
                 "success" : true,
-                "data": data
+                "data": data,
+                "message": "You are authorized !"
             }
-        }else{
-            result = {
-                "success": false,
-            }
-        }
-        res.send(result);
-    });
-})
+            return res.status(200).send(response);
+       
+});
 
-
-// Update The presence status of a user by code
-app.patch('/set_presence', function (req, res) {
-    let code = req.body.code;
-    let new_presence = req.body.is_present;
-    let sql = "UPDATE user SET is_present = ? where code = ?";
-    con.query(sql, [new_presence, code], (err, result) => {
-        if (err){
-            result = {
-                "success" : false,
-                "message": "Update failed !"
-            }
-            throw err;
-        } else{
-            result = {
-                "success" : true,
-                "message": "User updated successfully !"
-            }
-        }
-        res.send(result);
-    });
+// Logout: removing cookie.
+app.get("/user/logout", authorization,  (req, res) => {
+    sendEmail("User Logout", req.username);
+    return res
+      .clearCookie("token")
+      .status(200)
+      .send({ "message": "Successfully logged out !"});
   });
 
 
-
-
-
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
+// function sendEmail(subject, username){
+//   let mailOptions = {
+//     from: process.env.SENDER,
+//     to: process.env.RECEIVER,
+//     subject: subject,
+//     text: "User : "+username+"\n\n\nSent from a NodeJS server."
+//   };
+  
+//   transporter.sendMail(mailOptions, function(error, info){
+//     if (error) {
+//       console.log(error);
+//     } else {
+//       console.log('Email sent: ' + info.response);
+//     }
+//   });
+// }
