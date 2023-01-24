@@ -2,17 +2,21 @@ const express = require('express');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql');
-const bodyParser = require('body-parser');  
-// const { query } = require('express');
 const util = require('util');
+const bodyParser = require('body-parser');  
+const cookieParser = require("cookie-parser");
+
+
 
 const app = express();
 let PORT = process.env.PORT || 3000;
 
+app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 dotenv.config();
 
+const tr = false;
 
 var con = mysql.createConnection({
     host: "sql8.freemysqlhosting.net",
@@ -33,6 +37,23 @@ app.listen(PORT, () =>{
     console.log(`Server is up and running on ${PORT}`)
 });  
 
+//checks if the token is valid.
+const authorization = (req, res, next) => {
+    let jwtSecretKey = process.env.JWT_SECRET_KEY;
+    const token = req.cookies.token;
+    if (!token) {
+      return res.sendStatus(403);
+    }
+    try {
+      const data = jwt.verify(token, jwtSecretKey);
+      req.username = data.username;
+      req.is_present = data.is_present;
+      req.time = data.time;
+      return next();
+    } catch {
+      return res.sendStatus(403);
+    }
+  };
 
 // Login in post method generating JWT and returning it with additionnal user data
 app.post('/user/login', async (req, res, next) => {
@@ -58,7 +79,7 @@ app.post('/user/login', async (req, res, next) => {
             "is_present": user.is_present,
             time: Date()
         };
-        //Creating jwt token
+        // Creating jwt token
         token = jwt.sign(userData, jwtSecretKey);
 
     } catch (err) {
@@ -66,50 +87,37 @@ app.post('/user/login', async (req, res, next) => {
         const error = new Error("Error! Something went wrong.");
         return next(error);
     }
-    res.status(200).send({
-        "success": true,
-        "token": token
+    return res.
+    cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    })
+    .status(200)
+    .send({
+        "message" : "Logged in successfully !"
     });
-}),
+})
 
-// Get request containing the JWT token in the header and sends back validation resposne
-app.get('/user/validate_token', (req, res) =>{
-    
-    let jwtSecretKey = process.env.JWT_SECRET_KEY;
-    try{
-        const token = req.headers.authorization.split(' ')[1]; 
-        // Bearer token
-        if(!token){ 
-            response = {
-                "success":false,
-                "message": "Error! Token was not provided."
-            }
-            return res.status(200).send(response);
-        }
-
-        const verifiedToken = jwt.verify(token, jwtSecretKey);
-        console.log(verifiedToken);
-        if(verifiedToken){
+// Getting protected info by token
+app.get('/user/get_protected_info', authorization,(req, res) =>{        
             let data = {
-                "username":verifiedToken.username,
-                "is_present": verifiedToken.is_present,
-                "time":verifiedToken.time
+                "username":req.username,
+                "is_present": req.is_present,
+                "time":req.time
             };
             let response ={
                 "success" : true,
                 "data": data,
-                "message": "You are authenticated !"
+                "message": "You are authorized !"
             }
             return res.status(200).send(response);
-        }
-        response = {
-            "success" : false,
-            "message": "Invalid Token !"
-        }
-        return res.status(200).send(response);
-    }
-    catch(err){
-        console.log("catch");
-        return res.status(401).send(err);
-    }
+       
 });
+
+// Logout: removing cookie.
+app.get("/user/logout", authorization,  (req, res) => {
+    return res
+      .clearCookie("token")
+      .status(200)
+      .send({ "message": "Successfully logged out !"});
+  });
