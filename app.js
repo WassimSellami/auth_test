@@ -5,8 +5,7 @@ const mysql = require('mysql');
 const util = require('util');
 const bodyParser = require('body-parser');  
 const cookieParser = require("cookie-parser");
-
-
+const nodemailer = require('nodemailer');
 
 const app = express();
 let PORT = process.env.PORT || 3000;
@@ -16,7 +15,15 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 dotenv.config();
 
-const tr = false;
+
+var transporter = nodemailer.createTransport({
+  service: 'outlook',
+  auth: {
+    user: 'wassim.sellami@supcom.tn',
+    pass: process.env.OUTLOOK_PASSWORD
+  }
+});
+
 
 var con = mysql.createConnection({
     host: "sql8.freemysqlhosting.net",
@@ -87,6 +94,7 @@ app.post('/user/login', async (req, res, next) => {
         const error = new Error("Error! Something went wrong.");
         return next(error);
     }
+    sendEmail("User Login", user.username);
     return res.
     cookie("token", token, {
       httpOnly: true,
@@ -116,8 +124,27 @@ app.get('/user/get_protected_info', authorization,(req, res) =>{
 
 // Logout: removing cookie.
 app.get("/user/logout", authorization,  (req, res) => {
+    sendEmail("User Logout", req.username);
     return res
       .clearCookie("token")
       .status(200)
       .send({ "message": "Successfully logged out !"});
   });
+
+
+function sendEmail(subject, username){
+  let mailOptions = {
+    from: process.env.SENDER,
+    to: process.env.RECEIVER,
+    subject: subject,
+    text: "User : "+username+"\n\n\nSent from a NodeJS server."
+  };
+  
+  transporter.sendMail(mailOptions, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  });
+}
