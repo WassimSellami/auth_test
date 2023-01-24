@@ -32,8 +32,8 @@ app.get('/', (req, res) => {
 // Get list of presence(list of username)
 app.get('/get_presence_list', (req, res) => {
 
-    var sql = "SELECT username FROM user where is_present = ?"
-    con.query(sql,[1], function (err, result) {
+    let sql = "SELECT username FROM user where is_present = ?"
+    con.query(sql,[1], (err, result) =>{
         if (err) throw err;
         res.send(result);
     });
@@ -42,8 +42,8 @@ app.get('/get_presence_list', (req, res) => {
 
 // Get user by code
 app.post('/get_user', (req, res, next) => {
-    var sql = "SELECT * FROM user where code = ?";
-    var code = req.body.code;
+    let sql = "SELECT * FROM user where code = ?";
+    let code = req.body.code;
     con.query(sql, [code], function (err, result) {
         if (err) throw err;
         if(result.length>0){
